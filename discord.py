@@ -73,3 +73,4 @@ async def clearcards(ctx):
 
 # Rodar o bot
 bot.run(TOKEN)
+ 
