@@ -1,76 +1,86 @@
-import os
-import discord
-from discord.ext import commands
-from pymongo import MongoClient
+const { Client, Intents, MessageEmbed } = require('discord.js');
+const { MongoClient } = require('mongodb');
 
-# Configuração do bot
-TOKEN = os.environ.get('DISCORD_TOKEN')
-MONGO_URI = os.environ.get('MONGODB_URI')
+// Configuração do bot
+const TOKEN = process.env.DISCORD_TOKEN;
+const MONGO_URI = process.env.MONGODB_URI;
 
-# Conectar ao banco de dados MongoDB
-client = MongoClient(MONGO_URI)
-db = client['cardbot']
-cards_collection = db['cards']
+// Conectar ao banco de dados MongoDB
+const client = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+let db, cardsCollection;
 
-# Configuração do bot
-intents = discord.Intents.default()
-bot = commands.Bot(command_prefix='!', intents=intents)
+async function connectToMongo() {
+    try {
+        await client.connect();
+        console.log('Conectado ao banco de dados MongoDB');
+        db = client.db('cardbot');
+        cardsCollection = db.collection('cards');
 
-# Evento de inicialização do bot
-@bot.event
-async def on_ready():
-    print(f'Bot {bot.user.name} está online.')
+        // Verifica se as cartas já estão presentes no MongoDB
+        const count = await cardsCollection.countDocuments({});
+        if (count === 0) {
+            // Adiciona as cartas iniciais apenas se o banco de dados estiver vazio
+            const initialCards = [
+                { name: 'Card 1', image_url: 'https://example.com/card1.jpg' },
+                { name: 'Card 2', image_url: 'https://example.com/card2.jpg' },
+                { name: 'Card 3', image_url: 'https://example.com/card3.jpg' },
+                { name: 'Card 4', image_url: 'https://example.com/card4.jpg' },
+                { name: 'Card 5', image_url: 'https://example.com/card5.jpg' }
+            ];
 
-    # Verifica se as cartas já estão presentes no MongoDB
-    if cards_collection.count_documents({}) == 0:
-        # Adiciona as cartas iniciais apenas se o banco de dados estiver vazio
-        initial_cards = [
-            {"name": "Card 1", "image_url": "https://example.com/card1.jpg"},
-            {"name": "Card 2", "image_url": "https://example.com/card2.jpg"},
-            {"name": "Card 3", "image_url": "https://example.com/card3.jpg"},
-            {"name": "Card 4", "image_url": "https://example.com/card4.jpg"},
-            {"name": "Card 5", "image_url": "https://example.com/card5.jpg"}
-        ]
+            await cardsCollection.insertMany(initialCards);
+            console.log(`${initialCards.length} cartas foram inicializadas no banco de dados.`);
+        } else {
+            console.log('Cartas já presentes no banco de dados.');
+        }
+    } catch (error) {
+        console.error('Erro ao conectar ao banco de dados MongoDB:', error);
+    }
+}
 
-        for card in initial_cards:
-            card_document = {"card_name": card['name'], "image_url": card['image_url']}
-            cards_collection.insert_one(card_document)
-        print(f'{len(initial_cards)} cartas foram inicializadas no banco de dados.')
-    else:
-        print('Cartas já presentes no banco de dados.')
+connectToMongo();
 
-# Comando para mostrar cartas do usuário
-@bot.command(name='mycards', help='Mostra todos os cards no seu inventário.')
-async def mycards(ctx):
-    user_id = ctx.author.id
-    cards = cards_collection.find()
-    embed = discord.Embed(title="Seu Inventário de Cartas")
-    for card in cards:
-        embed.add_field(name=card['card_name'], value=f"[Imagem]({card['image_url']})", inline=False)
-    await ctx.send(embed=embed)
+// Configuração do bot Discord
+const intents = new Intents(Intents.ALL);
+const bot = new Client({ intents });
 
-# Comando para adicionar uma nova carta
-@bot.command(name='addcard', help='Adiciona um novo card ao seu inventário.')
-async def addcard(ctx, card_name: str, image_url: str):
-    card_document = {"card_name": card_name, "image_url": image_url}
-    cards_collection.insert_one(card_document)
-    await ctx.send(f'Card "{card_name}" adicionado ao seu inventário.')
+bot.once('ready', () => {
+    console.log(`Bot ${bot.user.tag} está online.`);
+});
 
-# Comando para remover uma carta
-@bot.command(name='removecard', help='Remove um card do seu inventário.')
-async def removecard(ctx, card_name: str):
-    result = cards_collection.delete_one({"card_name": card_name})
-    if result.deleted_count:
-        await ctx.send(f'Card "{card_name}" removido do seu inventário.')
-    else:
-        await ctx.send(f'Você não possui o card "{card_name}".')
+bot.on('message', async (message) => {
+    if (message.content.toLowerCase() === '!mycards') {
+        const cards = await cardsCollection.find({}).toArray();
+        const embed = new MessageEmbed().setTitle('Seu Inventário de Cartas');
+        
+        cards.forEach(card => {
+            embed.addField(card.card_name, `[Imagem](${card.image_url})`, false);
+        });
 
-# Comando para limpar todas as cartas do usuário
-@bot.command(name='clearcards', help='Remove todas as cartas do seu inventário.')
-async def clearcards(ctx):
-    result = cards_collection.delete_many({})
-    await ctx.send(f'Todas as cartas foram removidas do seu inventário.')
+        message.channel.send(embed);
+    } else if (message.content.toLowerCase().startsWith('!addcard')) {
+        const args = message.content.split(' ').slice(1);
+        const cardName = args[0];
+        const imageUrl = args[1];
 
-# Rodar o bot
-bot.run(TOKEN)
- 
+        const cardDocument = { card_name: cardName, image_url: imageUrl };
+        await cardsCollection.insertOne(cardDocument);
+        message.channel.send(`Card "${cardName}" adicionado ao seu inventário.`);
+    } else if (message.content.toLowerCase().startsWith('!removecard')) {
+        const args = message.content.split(' ').slice(1);
+        const cardName = args[0];
+
+        const result = await cardsCollection.deleteOne({ card_name: cardName });
+        if (result.deletedCount) {
+            message.channel.send(`Card "${cardName}" removido do seu inventário.`);
+        } else {
+            message.channel.send(`Você não possui o card "${cardName}".`);
+        }
+    } else if (message.content.toLowerCase() === '!clearcards') {
+        await cardsCollection.deleteMany({});
+        message.channel.send('Todas as cartas foram removidas do seu inventário.');
+    }
+});
+
+// Rodar o bot
+bot.login(TOKEN);
