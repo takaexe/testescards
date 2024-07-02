@@ -1,19 +1,25 @@
-const Discord = require('discord.js');
+const { Client, Intents, MessageEmbed } = require('discord.js');
 const { MongoClient } = require('mongodb');
 
 // Configurações do bot
-const client = new Discord.Client();
+const client = new Client({ 
+    intents: [
+        Intents.FLAGS.GUILDS, // Para receber informações sobre servidores (guilds)
+        Intents.FLAGS.GUILD_MESSAGES // Para receber mensagens de texto nos canais
+        // Adicione outras intenções conforme necessário
+    ]
+});
 const prefix = '!'; // Prefixo dos comandos
 const MONGO_URI = process.env.MONGODB_URI; // URI do MongoDB
 
 // Conectar ao MongoDB
 const mongoClient = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
-// Evento de inicialização do bot
+// Evento disparado quando o bot estiver pronto
 client.once('ready', async () => {
     console.log(`Bot ${client.user.tag} está online.`);
-    
-    // Conectar ao banco de dados
+
+    // Conectar ao banco de dados MongoDB
     try {
         await mongoClient.connect();
         console.log('Conectado ao MongoDB.');
@@ -44,21 +50,21 @@ client.once('ready', async () => {
 });
 
 // Comando para mostrar cartas do usuário
-client.on('message', async message => {
+client.on('messageCreate', async message => {
     if (message.content.startsWith(`${prefix}mycards`)) {
         try {
             const db = mongoClient.db('cardbot'); // Nome da database
             const cardsCollection = db.collection('cards'); // Nome da coleção
 
             const cards = await cardsCollection.find({}).toArray();
-            const embed = new Discord.MessageEmbed()
+            const embed = new MessageEmbed()
                 .setTitle('Seu Inventário de Cartas');
 
             cards.forEach(card => {
                 embed.addField(card.name, `[Imagem](${card.image_url})`, false);
             });
 
-            message.channel.send(embed);
+            message.channel.send({ embeds: [embed] });
         } catch (error) {
             console.error('Erro ao buscar cartas:', error);
             message.channel.send('Ocorreu um erro ao buscar suas cartas.');
