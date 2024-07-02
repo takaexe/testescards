@@ -1,0 +1,11 @@
+# render.yaml
+
+services:
+  - name: bot
+    env:
+      - key: DISCORD_TOKEN
+        from_secret: discord_token
+      - key: MONGODB_URI
+        from_secret: mongodb_uri
+    buildCommand: python3 -m pip install -r requirements.txt
+    startCommand: python3 bot.py
