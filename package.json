@@ -2,9 +2,9 @@
   "name": "discord-bot",
   "version": "1.0.0",
   "description": "Bot Discord usando discord.js e MongoDB",
-  "main": "discord.js",  // Nome do seu arquivo principal
+  "main": "discord.js", 
   "scripts": {
-    "start": "node discord.js"  // Comando para iniciar o bot
+    "start": "node discord.js"  
   },
   "author": "Zero",
   "license": "MIT",
